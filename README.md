@@ -1,3 +1,5 @@
+<img width="1792" height="576" alt="AivoraLOGOT" src="https://github.com/user-attachments/assets/df7caa54-0cce-4214-ae52-98ae8717650b" />
+
 # Aivora – The Modern Swift Networking Engine
 
 ![Aivora](https://img.shields.io/badge/Aivora-Networking%20Engine-red)
