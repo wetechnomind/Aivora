@@ -7,7 +7,7 @@
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20macOS%20%7C%20watchOS%20%7C%20tvOS-blue.svg)
 ![Swift Package Manager](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-orange?logo=swift)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/Version-1.1.0-blue.svg)
 
 Aivora is a **pure Swift Concurrency–based** networking library designed as a modern replacement for Alamofire.  
 Lightweight, fast, and beginner-friendly — it’s built to simplify async/await HTTP networking while offering advanced power features.
@@ -60,12 +60,12 @@ Lightweight, fast, and beginner-friendly — it’s built to simplify async/awai
    ```swift
    https://github.com/WeTechnoMind/Aivora.git
    ```
-3. Select **Version: 1.0.1** (exact tag).
+3. Select **Version: 1.1.0** (exact tag).
 
 Or manually add to `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/WeTechnoMind/Aivora.git", from: "1.0.1")
+    .package(url: "https://github.com/WeTechnoMind/Aivora.git", from: "1.1.0")
 ]
 ```
 

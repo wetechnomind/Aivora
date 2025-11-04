@@ -32,12 +32,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Added example projects (UIKit + SwiftUI)
 - Created unit test suite for core components
 
-### 🔜 Planned for v1.1.0
-- AI Insights engine (automatic endpoint analysis)
-- Disk persistence improvements for cache
-- Interceptor chain enhancement
-- Background download queue
-
 **Author:** WeTechnoMind
 **Date:** November 1, 2025
+**License:** MIT
+
+
+## [1.1.0] – 2025-11-04
+### 🚀 Initial Release – Aivora v1.1.0
+
+### ✨ Added
+
+- Generic requests for decoded models & raw Data
+
+- Automatic JSON encoding via AivoraJSONEncoder
+
+- Automatic JSON decoding via AivoraJSONDecoder
+
+- AivoraRequest.json() factory for encoding any Encodable type
+
+- Centralized AivoraError handling
+
+- Ready for direct decoding via AivoraClient
+
+- Reuse of adapters, caching, and retry logic
+
+
+**Author:** WeTechnoMind
+**Date:** November 4, 2025
 **License:** MIT

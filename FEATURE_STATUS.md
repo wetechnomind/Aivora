@@ -21,3 +21,14 @@ Notes:
 - Some platform-specific background behaviors (real background resume) require app integration and entitlements.
 - Offline queue persistence is scaffolded; serializing closures isn't possible — store request metadata in production.
 - Token refresh interceptor includes a simulated refresh; wire in your auth endpoint for production.
+
+
+Aivora Feature Implementation Status (v1.1.0) - UPDATED
+
+✅ Generic requests for decoded models & raw Data
+✅ Automatic JSON encoding via AivoraJSONEncoder
+✅ Automatic JSON decoding via AivoraJSONDecoder
+✅ AivoraRequest.json() factory for encoding any Encodable type
+✅ Centralized AivoraError handling
+✅ Ready for direct decoding via AivoraClient
+✅ Reuse of adapters, caching, and retry logic
