@@ -60,12 +60,12 @@ Lightweight, fast, and beginner-friendly — it’s built to simplify async/awai
    ```swift
    https://github.com/WeTechnoMind/Aivora.git
    ```
-3. Select **Version: 1.0.0** (exact tag).
+3. Select **Version: 1.0.1** (exact tag).
 
 Or manually add to `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/WeTechnoMind/Aivora.git", from: "1.0.0")
+    .package(url: "https://github.com/WeTechnoMind/Aivora.git", from: "1.0.1")
 ]
 ```
 
@@ -79,29 +79,39 @@ import Aivora
 @main
 struct ExampleApp {
     static func main() async {
+        // Step 1: Create the client configuration
+        let config = AivoraClient.Configuration(
+            baseURL: URL(string: "https://jsonplaceholder.typicode.com")
+        )
+
+        // Step 2: Initialize AivoraClient
+        let client = AivoraClient(configuration: config)
+
         do {
-            // Define your request
+            // Step 3: Define the request (relative path only)
             let request = AivoraRequest(
-                path: "https://jsonplaceholder.typicode.com/posts/1",
+                path: "/posts/1",
                 method: .GET
             )
-            
-            // Convert to URLRequest
-            let urlRequest = try request.asURLRequest(baseURL: nil)
-            
-            // Perform the request
-            let (data, response) = try await URLSession.shared.data(for: urlRequest)
-            
-            // Decode JSON
-            if let json = try? JSONSerialization.jsonObject(with: data) {
-                print("Response:", json)
+
+            // Step 4: Execute and decode directly into a Swift model
+            struct Post: Decodable {
+                let id: Int
+                let title: String
+                let body: String
             }
+
+            let post: Post = try await client.request(request)
+            print("Post ID:", post.id)
+            print("Title:", post.title)
+            print("Body:", post.body)
+
         } catch {
-            print("Error:", error)
+            // Step 5: Handle errors gracefully
+            print("Request failed:", error)
         }
     }
 }
-
 ```
 
 ## Advanced Examples
@@ -169,31 +179,47 @@ import Aivora
 @main
 struct PostExample {
     static func main() async {
+        // Step 1: Configure the client
+        let config = AivoraClient.Configuration(
+            baseURL: URL(string: "https://jsonplaceholder.typicode.com")
+        )
+        let client = AivoraClient(configuration: config)
+
+        // Step 2: Define request & response models
+        struct CreatePostRequest: Encodable {
+            let title: String
+            let body: String
+            let userId: Int
+        }
+
+        struct CreatePostResponse: Decodable {
+            let id: Int
+            let title: String
+            let body: String
+            let userId: Int
+        }
+
+        // Step 3: Build the endpoint
+        let endpoint = AivoraRequest(path: "/posts", method: .POST)
+
+        // Step 4: Perform POST request with JSON body
         do {
-            // Create JSON body
-            let payload = ["title": "foo", "body": "bar", "userId": 1]
-            let jsonData = try JSONSerialization.data(withJSONObject: payload)
-            
-            // Prepare request
-            let request = AivoraRequest(
-                path: "https://jsonplaceholder.typicode.com/posts",
-                method: .POST,
-                headers: ["Content-Type": "application/json"],
-                body: jsonData
-            )
-            
-            let urlRequest = try request.asURLRequest(baseURL: nil)
-            let (data, _) = try await URLSession.shared.data(for: urlRequest)
-            
-            // Handle response
-            let json = try JSONSerialization.jsonObject(with: data)
-            print("Created:", json)
+            let requestBody = CreatePostRequest(title: "foo", body: "bar", userId: 1)
+            let response: CreatePostResponse = try await client.request(endpoint, body: requestBody)
+
+            // Step 5: Handle decoded response
+            print("Created Post:")
+            print("ID:", response.id)
+            print("Title:", response.title)
+            print("Body:", response.body)
+            print("User ID:", response.userId)
+
         } catch {
-            print("Error:", error)
+            // Step 6: Handle any networking or decoding errors
+            print("Request failed:", error)
         }
     }
-}
-```
+}```
 
 ### 3. GET Request with Body
 ```swift
@@ -203,80 +229,100 @@ import Aivora
 @main
 struct GetExample {
     static func main() async {
+        // Step 1: Configure the Aivora client
+        let config = AivoraClient.Configuration(
+            baseURL: URL(string: "https://jsonplaceholder.typicode.com")
+        )
+        let client = AivoraClient(configuration: config)
+
+        // Step 2: Define a Decodable model for the API response
+        struct Comment: Decodable {
+            let postId: Int
+            let id: Int
+            let name: String
+            let email: String
+            let body: String
+        }
+
+        // Step 3: Create a request endpoint with query parameters
+        let request = AivoraRequest(
+            path: "/comments",
+            method: .GET,
+            queryItems: [
+                URLQueryItem(name: "postId", value: "1")
+            ]
+        )
+
+        // Step 4: Perform the request
         do {
-            // Example GET with query parameters
-            let request = AivoraRequest(
-                path: "https://jsonplaceholder.typicode.com/comments",
-                method: .GET,
-                queryItems: [
-                    URLQueryItem(name: "postId", value: "1")
-                ]
-            )
-            
-            let urlRequest = try request.asURLRequest(baseURL: nil)
-            let (data, _) = try await URLSession.shared.data(for: urlRequest)
-            
-            if let json = try? JSONSerialization.jsonObject(with: data) {
-                print("Comments:", json)
+            let comments: [Comment] = try await client.request(request)
+            print("Comments for postId=1:\n")
+            for comment in comments {
+                print("💬 \(comment.name) (\(comment.email)):\n\(comment.body)\n")
             }
         } catch {
-            print("Error:", error)
+            // Step 5: Handle network or decoding errors
+            print("Error fetching comments:", error)
         }
     }
-}
-```
+}```
 
 ### 4. Multipart Upload with Progress
 ```swift
 import Foundation
 import Aivora
+import UIKit // Needed only for UIImage to Data conversion
 
 @main
 struct MultipartUploadExample {
     static func main() async {
+        // Step 1: Initialize client
+        let config = AivoraClient.Configuration(
+            baseURL: URL(string: "https://example.com")
+        )
+        let client = AivoraClient(configuration: config)
+
+        // Step 2: Prepare multipart request
+        var multipartRequest = AivoraMultipartRequest(path: "/upload")
+
+        // Add text fields
+        multipartRequest.addFormField(name: "username", value: "dhiren")
+
+        // Add file data (optional)
+        if let imageData = UIImage(named: "photo.jpg")?.jpegData(compressionQuality: 0.8) {
+            multipartRequest.addFile(
+                fieldName: "file",
+                filename: "photo.jpg",
+                mimeType: "image/jpeg",
+                data: imageData
+            )
+        }
+
+        // Step 3: Perform upload using AivoraClient
         do {
-            var request = AivoraMultipartRequest(path: "https://example.com/upload")
-            request.addFormField(name: "username", value: "dhiren")
-            
-            if let imageData = UIImage(named: "photo.jpg")?.jpegData(compressionQuality: 0.8) {
-                request.addFile(
-                    fieldName: "file",
-                    filename: "photo.jpg",
-                    mimeType: "image/jpeg",
-                    data: imageData
-                )
-            }
-            
-            var urlRequest = try request.asURLRequest(baseURL: nil)
-            urlRequest.httpBody = request.bodyData // Attach the full multipart body
-            
-            // Use upload task to track progress
-            let session = URLSession(configuration: .default, delegate: UploadDelegate(), delegateQueue: nil)
-            let task = session.uploadTask(with: urlRequest, from: request.bodyData)
-            task.resume()
-            
-            RunLoop.current.run() // Keep alive for demo
+            let response: UploadResponse = try await client.upload(
+                multipartRequest,
+                onProgress: { progress in
+                    print(String(format: "Upload progress: %.2f%%", progress * 100))
+                }
+            )
+
+            // Step 4: Handle decoded response
+            print("Upload complete:")
+            print("File ID:", response.fileId)
+            print("URL:", response.url)
+
         } catch {
-            print("Error:", error)
+            // Step 5: Centralized error handling
+            print("Upload failed:", error)
         }
     }
 }
 
-/// UploadDelegate tracks and prints upload progress.
-final class UploadDelegate: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
-                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
-        let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
-        print(String(format: "Upload progress: %.2f%%", progress * 100))
-    }
-    
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error = error {
-            print("Upload failed:", error)
-        } else {
-            print("Upload completed successfully.")
-        }
-    }
+// MARK: - Response Model
+struct UploadResponse: Decodable {
+    let fileId: String
+    let url: String
 }
 ```
 
