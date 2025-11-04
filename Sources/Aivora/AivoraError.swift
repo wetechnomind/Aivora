@@ -26,55 +26,65 @@
 
 import Foundation
 
-/// Represents all possible error cases in the Aivora networking and caching layers.
+/// A unified enumeration that represents all possible errors
+/// encountered within the **Aivora networking and caching layers**.
 ///
-/// `AivoraError` provides descriptive, structured, and typed error cases
-/// for clear debugging, analytics, and developer experience.
+/// This enum provides type-safe and descriptive error handling for
+/// networking, caching, encoding/decoding, and server response errors.
+/// It conforms to both `Error` and `LocalizedError` to provide meaningful
+/// developer and user-facing messages.
 public enum AivoraError: Error, LocalizedError {
     
-    // MARK: - Core Networking
+    // MARK: - Core Networking Errors
     
-    /// The URL provided to the request was invalid or malformed.
+    /// The URL provided to the request is invalid or improperly formatted.
     case invalidURL
     
-    /// A network-level error occurred (e.g., no internet, DNS issue).
-    /// - Parameter error: The original underlying `Error` from `URLSession`.
+    /// A network-level issue occurred (e.g., no internet, DNS lookup failed, etc.).
+    /// - Parameter Error: The underlying system error from `URLSession`.
     case network(Error)
     
-    /// The response decoding failed (e.g., invalid JSON format or mismatched model).
-    /// - Parameter error: The original decoding `Error`.
-    case decoding(Error)
+    /// The response data could not be decoded into the expected model type.
+    /// Usually caused by mismatched model structures or malformed JSON.
+    case decodingFailed(Error)
     
-    /// The server returned a non-success HTTP status code (e.g., 404, 500).
+    /// The request body could not be encoded into JSON.
+    /// Typically caused by encoding invalid data or unsupported types.
+    case encodingFailed(Error)
+    
+    /// The server returned a response with a **non-successful HTTP status code**.
     /// - Parameters:
-    ///   - statusCode: The HTTP status code returned by the server.
-    ///   - data: Optional raw data returned from the server for debugging.
-    ///   - response: The associated `URLResponse` object for additional context.
+    ///   - statusCode: The HTTP status code (e.g., 400, 401, 500).
+    ///   - data: Optional raw data returned by the server for further analysis.
+    ///   - response: The original `URLResponse` from the request.
     case server(statusCode: Int, data: Data?, response: URLResponse?)
     
-    /// The request was cancelled by the client or system.
+    /// The request was intentionally or automatically cancelled.
     case cancelled
     
-    /// The request took too long and exceeded its timeout interval.
+    /// The request exceeded its timeout interval and failed.
     case timeout
     
-    /// Authentication failed (commonly due to 401 Unauthorized).
+    /// Authentication failed, typically due to a `401 Unauthorized` response.
     case authenticationFailed
     
-    /// An unknown or unspecified error occurred.
+    /// A catch-all case for unexpected or unclassified errors.
     case unknown
 
-    // MARK: - Cache & Disk Layer
+    // MARK: - Cache & Disk Layer Errors
     
-    /// No data found for a requested cache key.
+    /// No cached data was found for a given cache key.
+    /// - Parameter key: The cache key that caused the miss.
     case cacheMiss(key: String)
     
-    /// A disk I/O or file system related failure.
+    /// A disk read/write or file system error occurred.
+    /// - Parameter Error: The underlying file system error.
     case diskError(Error)
     
     // MARK: - Computed Properties
     
-    /// A user-friendly description of the error, suitable for display or logging.
+    /// A localized, human-readable description of the error.
+    /// Suitable for displaying to users or logging.
     public var errorDescription: String? {
         switch self {
         case .invalidURL:
@@ -83,8 +93,11 @@ public enum AivoraError: Error, LocalizedError {
         case .network(let e):
             return "Network error: \(e.localizedDescription)"
             
-        case .decoding(let e):
+        case .decodingFailed(let e):
             return "Decoding failed: \(e.localizedDescription)"
+            
+        case .encodingFailed(let e):
+            return "Encoding failed: \(e.localizedDescription)"
             
         case .server(let code, _, _):
             return "Server returned HTTP status \(code)."
@@ -109,17 +122,22 @@ public enum AivoraError: Error, LocalizedError {
         }
     }
     
-    /// Provides the original underlying system or decoding error, if any.
+    /// Returns the **underlying system or framework error**, if available.
+    /// Helpful for debugging or deeper inspection of the root cause.
     public var underlyingError: Error? {
         switch self {
-        case .network(let e), .decoding(let e), .diskError(let e):
+        case .network(let e),
+             .decodingFailed(let e),
+             .encodingFailed(let e),
+             .diskError(let e):
             return e
         default:
             return nil
         }
     }
     
-    /// Indicates if the error is likely related to networking or connectivity.
+    /// A Boolean indicating whether the error is related to network connectivity.
+    /// This can help in handling offline states or retry mechanisms.
     public var isNetworkRelated: Bool {
         switch self {
         case .network, .timeout:
@@ -133,6 +151,9 @@ public enum AivoraError: Error, LocalizedError {
 // MARK: - Equatable Support
 
 extension AivoraError: Equatable {
+    
+    /// Provides equality comparison between two `AivoraError` values.
+    /// Useful for testing and error-specific handling in switch statements.
     public static func == (lhs: AivoraError, rhs: AivoraError) -> Bool {
         switch (lhs, rhs) {
         case (.invalidURL, .invalidURL),
@@ -141,19 +162,25 @@ extension AivoraError: Equatable {
              (.authenticationFailed, .authenticationFailed),
              (.unknown, .unknown):
             return true
+            
         case (.server(let a, _, _), .server(let b, _, _)):
             return a == b
+            
         case (.cacheMiss(let a), .cacheMiss(let b)):
             return a == b
+            
         default:
             return false
         }
     }
 }
 
-// MARK: - Debug Logging
+// MARK: - Debug Logging Support
 
 extension AivoraError: CustomDebugStringConvertible {
+    
+    /// A more verbose description of the error, including its type
+    /// and any available underlying error. Ideal for debugging.
     public var debugDescription: String {
         var base = "[AivoraError] \(errorDescription ?? "No description")"
         if let underlying = underlyingError {

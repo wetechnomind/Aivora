@@ -1,4 +1,4 @@
-# Aivora UIKit Example (Aivora v1.0.0)
+# Aivora UIKit Example (Aivora v1.1.0)
 
 This is a minimal UIKit example demonstrating core Aivora features:
 - GET request (JSON decode)
