@@ -39,24 +39,14 @@ import Foundation
 public final class AivoraClient {
 
     // MARK: - Configuration Structure
-
-    /// Configuration object defining base URL, default headers, and timeout settings.
+    /// Encapsulates all configurable properties for `AivoraClient`.
+    /// Includes base URL, default headers, and request timeout.
     public struct Configuration {
-        /// The base URL for all requests (optional).
-        public var baseURL: URL?
+        public var baseURL: URL?                  // Base API endpoint
+        public var defaultHeaders: [String: String] // Default headers applied to all requests
+        public var timeout: TimeInterval           // Request timeout duration
 
-        /// Default headers applied to every outgoing request.
-        public var defaultHeaders: [String: String]
-
-        /// Timeout interval for requests, in seconds.
-        public var timeout: TimeInterval
-
-        /// Creates a new configuration instance.
-        ///
-        /// - Parameters:
-        ///   - baseURL: Optional base API URL.
-        ///   - defaultHeaders: Common headers for all requests.
-        ///   - timeout: Timeout duration for network calls (default = 60 seconds).
+        /// Initializes a new configuration instance.
         public init(baseURL: URL? = nil,
                     defaultHeaders: [String: String] = [:],
                     timeout: TimeInterval = 60) {
@@ -68,190 +58,191 @@ public final class AivoraClient {
 
     // MARK: - Core Properties
 
-    /// The underlying `URLSession` instance used for network operations.
-    internal let session: URLSession
-
-    /// Stores configuration details such as base URL and default headers.
-    public var configuration: Configuration
-
-    /// Centralized logging utility shared across Aivora.
-    public let logger = AivoraLogger.shared
-
-    /// Manages automatic retry behavior for failed network calls.
-    public let retryPolicy = AivoraRetryPolicy()
-
-    /// In-memory cache used to store decoded responses for performance.
-    public let cache = AivoraCache.shared
-
-    /// Optional adapter that can modify or enrich outgoing requests.
-    public let adapter: AivoraRequestAdapter?
+    internal let session: URLSession              // URLSession used for network communication
+    public var configuration: Configuration       // Holds client configuration
+    public let logger = AivoraLogger.shared       // Shared logger for debugging and analytics
+    public let retryPolicy = AivoraRetryPolicy()  // Retry mechanism for transient failures
+    public let cache = AivoraCache.shared         // In-memory/disk response caching
+    public let adapter: AivoraRequestAdapter?     // Optional request adapter for custom modification
 
     // MARK: - Initialization
 
-    /// Initializes an `AivoraClient` instance.
-    ///
-    /// - Parameters:
-    ///   - configuration: The configuration object (base URL, headers, etc.).
-    ///   - adapter: Optional request adapter for custom modification of requests.
-    ///   - urlSession: Custom `URLSession` instance; defaults to system configuration.
+    /// Initializes the `AivoraClient` with optional configuration, adapter, and custom URLSession.
     public init(configuration: Configuration = .init(),
                 adapter: AivoraRequestAdapter? = nil,
                 urlSession: URLSession? = nil) {
         self.configuration = configuration
         self.adapter = adapter
 
-        // Create and configure the URL session
+        // Configure URLSession with timeout
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = configuration.timeout
         self.session = urlSession ?? URLSession(configuration: config)
 
-        // Start reachability monitoring to track network availability
+        // Start reachability monitoring and bind offline queue to this client
         AivoraReachability.shared.start()
-
-        // Bind this client to the offline queue so queued requests can execute later
         AivoraOfflineQueue.shared.client = self
     }
 
-    // MARK: - Generic Request Execution
+    // MARK: - Generic Request Execution (Decoded Models)
 
     /// Executes a network request and decodes its response into a given `Decodable` type.
     ///
-    /// This function performs:
-    /// - Request adaptation (if an adapter is provided)
-    /// - Cache lookup and validation
-    /// - Actual network call execution
-    /// - Response decoding and caching
-    ///
-    /// - Parameter endpoint: The request definition (`AivoraRequest`).
-    /// - Returns: A decoded object of the specified type `T`.
-    /// - Throws: `AivoraError` for network, decoding, or server issues.
+    /// Automatically checks the cache before performing the request,
+    /// logs activity, and handles server errors gracefully.
     public func request<T: Decodable>(_ endpoint: AivoraRequest) async throws -> T {
-        // Apply request adapter if available
+        // Apply any adapter transformation (e.g., adding auth headers)
         let adapted = try await adapter?.adapt(endpoint) ?? endpoint
         let cacheKey = adapted.cacheKey
 
-        // ✅ Step 1: Attempt to retrieve a cached response before performing the network call
+        // Step 1: Check cache
         if let cached = cache.value(forKey: cacheKey) as? T {
             logger.log(.info, "Cache hit: \(cacheKey)")
             return cached
         }
 
-        // ✅ Step 2: Perform actual network call
+        // Step 2: Perform request
         let (data, response) = try await perform(adapted)
 
-        // Ensure a valid HTTP response
+        // Step 3: Validate HTTP response
         guard let http = response as? HTTPURLResponse else {
             throw AivoraError.unknown
         }
 
-        // ✅ Step 3: Decode and cache successful responses
+        // Step 4: Decode response if successful
         if (200..<300).contains(http.statusCode) {
-            let decoded = try JSONDecoder().decode(T.self, from: data)
+            let decoded = try AivoraJSONDecoder.decode(T.self, from: data)
             cache.set(value: decoded as AnyObject, forKey: cacheKey)
             return decoded
         } else {
-            // ⚠️ Handle non-success HTTP responses
+            //  Step 5: Throw server error for non-2xx status
             throw AivoraError.server(statusCode: http.statusCode, data: data, response: http)
         }
     }
 
+    // MARK: - Raw Data Request Support
+
+    /// Executes a network request and returns the raw `Data` response.
+    ///
+    /// Useful for endpoints that don’t return JSON (e.g., image downloads, binary files).
+    public func requestData(_ endpoint: AivoraRequest) async throws -> Data {
+        // Apply adapter modification if available
+        let adapted = try await adapter?.adapt(endpoint) ?? endpoint
+        let (data, response) = try await perform(adapted)
+
+        // Validate HTTP response
+        guard let http = response as? HTTPURLResponse else {
+            throw AivoraError.unknown
+        }
+
+        // Return data for successful responses
+        if (200..<300).contains(http.statusCode) {
+            return data
+        } else {
+            // Throw server-side error with response details
+            throw AivoraError.server(statusCode: http.statusCode, data: data, response: http)
+        }
+    }
+
+    // MARK: - SON Body Encoding Support
+
+    /// Executes a request with an `Encodable` JSON body and decodes a `Decodable` response.
+    ///
+    /// - Automatically encodes the body using `AivoraJSONEncoder`.
+    /// - Adds `Content-Type: application/json` header if missing.
+    public func request<Body: Encodable, Response: Decodable>(
+        _ endpoint: AivoraRequest,
+        body: Body
+    ) async throws -> Response {
+        var encodedEndpoint = endpoint
+        // Encode request body as JSON
+        encodedEndpoint.body = try AivoraJSONEncoder.encode(body)
+        // Ensure correct content type header
+        encodedEndpoint.headers["Content-Type"] = "application/json"
+        // Delegate actual execution to the generic request method
+        return try await request(encodedEndpoint)
+    }
+
     // MARK: - Internal Request Performer
 
-    /// Performs the actual URLSession request for the provided endpoint.
-    ///
-    /// This method:
-    /// - Builds the final `URLRequest` using base URL and headers.
-    /// - Merges default headers with request-specific headers.
-    /// - Logs outgoing requests.
-    /// - Executes the request through the retry policy for reliability.
-    ///
-    /// - Parameter endpoint: The configured `AivoraRequest`.
-    /// - Returns: A tuple `(Data, URLResponse)` upon successful completion.
+    /// Constructs and performs the actual network call.
+    /// Handles header merging, retries, and logging.
     private func perform(_ endpoint: AivoraRequest) async throws -> (Data, URLResponse) {
-        // Build the final URLRequest (resolves relative paths using baseURL)
+        // Convert endpoint into a URLRequest (applies baseURL + parameters)
         var urlRequest = try endpoint.asURLRequest(baseURL: configuration.baseURL)
 
-        // Merge default headers if not already set
-        for (key, value) in configuration.defaultHeaders where urlRequest.value(forHTTPHeaderField: key) == nil {
+        // Merge default headers if not already present
+        for (key, value) in configuration.defaultHeaders
+        where urlRequest.value(forHTTPHeaderField: key) == nil {
             urlRequest.setValue(value, forHTTPHeaderField: key)
         }
 
-        // Log the outgoing request for debugging and analytics
+        // Log outgoing request details
         logger.log(.debug, "→ \(urlRequest.httpMethod ?? "REQ") \(urlRequest.url?.absoluteString ?? "")")
 
-        // Execute the request using the retry policy
+        // Execute request with retry support
         return try await retryPolicy.execute { [session] in
             try await session.data(for: urlRequest)
         }
     }
 
-    // MARK: - Multipart Uploads
+    // MARK: - Multipart Uploads (with Progress Tracking)
 
-    /// Handles multipart uploads (e.g., file uploads) with progress tracking and decoding.
+    /// Performs a multipart/form-data upload with progress updates.
     ///
-    /// This function:
-    /// - Builds a multipart request
-    /// - Tracks upload progress
-    /// - Decodes the server’s response upon completion
-    ///
-    /// - Parameters:
-    ///   - endpoint: Multipart request containing form data and files.
-    ///   - progress: Closure called with upload progress (0.0–1.0).
-    /// - Returns: A decoded object of type `T` if successful.
-    /// - Throws: `AivoraError` on network or decoding failures.
+    /// Supports background upload progress tracking and JSON decoding on completion.
     public func uploadMultipart<T: Decodable>(
         _ endpoint: AivoraMultipartRequest,
         progress: @escaping (Double) -> Void
     ) async throws -> T {
-
-        // Prepare the multipart URLRequest (includes bodyData)
+        // Build multipart request
         let urlRequest = try endpoint.asURLRequest(baseURL: configuration.baseURL)
 
-        // Use continuation to bridge async completion handler
         return try await withCheckedThrowingContinuation { continuation in
-            // Create the upload task
+            // Create upload task
             let task = session.uploadTask(with: urlRequest, from: endpoint.bodyData) { data, response, error in
-                defer { progress(1.0) } // Ensure progress completes at the end
+                defer { progress(1.0) } // Ensure completion callback
 
-                // Handle client-side or network errors
+                // Handle network-level errors
                 if let error = error {
                     continuation.resume(throwing: AivoraError.network(error))
                     return
                 }
 
-                // Ensure valid response and data
+                // Validate response and data
                 guard let data = data, let http = response as? HTTPURLResponse else {
                     continuation.resume(throwing: AivoraError.unknown)
                     return
                 }
 
-                // ✅ Successful response — attempt to decode
+                // Parse success responses
                 if (200..<300).contains(http.statusCode) {
                     do {
-                        let decoded = try JSONDecoder().decode(T.self, from: data)
+                        let decoded = try AivoraJSONDecoder.decode(T.self, from: data)
                         continuation.resume(returning: decoded)
                     } catch {
-                        continuation.resume(throwing: AivoraError.decoding(error))
+                        // Handle JSON decoding error
+                        continuation.resume(throwing: AivoraError.decodingFailed(error))
                     }
                 } else {
-                    // ⚠️ Server returned an error response
+                    // Handle server-side error
                     continuation.resume(
                         throwing: AivoraError.server(statusCode: http.statusCode, data: data, response: http)
                     )
                 }
             }
 
-            // Observe upload progress and report it on the main thread
+            // Observe and report upload progress
             let observation = task.progress.observe(\.fractionCompleted) { prog, _ in
                 DispatchQueue.main.async {
                     progress(prog.fractionCompleted)
                 }
             }
 
-            // Start the upload
+            // Start upload task
             task.resume()
 
-            // Clean up progress observation after the task completes or is canceled
+            // Clean up observation upon task cancellation
             Task.detached {
                 await withTaskCancellationHandler {
                     observation.invalidate()

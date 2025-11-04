@@ -110,7 +110,7 @@ public extension AivoraClient {
                         AivoraDiskCache.shared.set(data: data, forKey: cacheKey, ttl: 60 * 5)
                         continuation.resume(returning: decoded)
                     } catch {
-                        continuation.resume(throwing: AivoraError.decoding(error))
+                        continuation.resume(throwing: AivoraError.decodingFailed(error))
                     }
 
                 case 401:
