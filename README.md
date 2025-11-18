@@ -112,6 +112,7 @@ struct ExampleApp {
         }
     }
 }
+
 ```
 
 ## Advanced Examples
@@ -168,10 +169,12 @@ Features
 
 - Provides human-readable reports and short suggestions for UI or logging.
 
+
 ```
 
 
 ### 2. POST Request with Body
+
 ```swift
 import Foundation
 import Aivora
@@ -219,7 +222,9 @@ struct PostExample {
             print("Request failed:", error)
         }
     }
-}```
+}
+
+```
 
 ### 3. GET Request with Body
 ```swift
@@ -265,7 +270,9 @@ struct GetExample {
             print("Error fetching comments:", error)
         }
     }
-}```
+}
+
+```
 
 ### 4. Multipart Upload with Progress
 ```swift
@@ -324,6 +331,7 @@ struct UploadResponse: Decodable {
     let fileId: String
     let url: String
 }
+
 ```
 
 ### 5. Using a Request Adapter
